@@ -23,16 +23,19 @@ class ImdbImporter
 		// tracking_tag = 'title-maindetails'
 		foreach ($ratings as $rating)
 		{
-			echo 'Fetching submission details for "'.$rating['title'].'"'.PHP_EOL;
-
-			$tconst = $this->get_tconst($rating);
-
-			if ($tconst === null) continue;
-
-			$auth = $this->get_auth_token($tconst);
-
-			$this->submit_rating($rating, $tconst, $auth);
+			$this->submit_one($rating);
 		}
+	}
+
+	public function submit_one(array $rating)
+	{
+		echo 'Fetching submission details for "'.$rating['title'].'"'.PHP_EOL;
+
+		$tconst = $this->get_tconst($rating);
+
+		if ($tconst === null) return false;
+
+		return $this->submit_rating($rating, $tconst);
 	}
 
 	private function get_tconst($rating)
@@ -116,13 +119,14 @@ class ImdbImporter
 		return $data_auth;
 	}
 
-	private function submit_rating($rating, $tconst, $auth)
+	private function submit_rating($rating, $tconst)
 	{
 		echo 'Submitting rating for '.$rating['title'].PHP_EOL;
 
 		$cookie_details = ['id' => $this->id];
 
 		$imdb_rating = floor($rating['rating'] / $this->rating_base * 10);
+		$auth = $this->get_auth_token($tconst);
 
 		$data = ['tconst' => $tconst, 'rating' => $imdb_rating, 'auth' => $auth, 'tracking_tag' => 'title-maindetails'];
 		$data = http_build_query($data);
@@ -138,9 +142,17 @@ class ImdbImporter
 		$context = stream_context_create($context_options);
 
 		$page_url = 'http://www.imdb.com/ratings/_ajax/title';
-		$page_content = file_get_contents($page_url, false, $context);
+		$result = file_get_contents($page_url, false, $context);
+
+		$result = json_decode($result, true);
+
+		if ($result['status'] !== 200) {
+			echo 'Error while submitting rating. Status: '.$result['status'].PHP_EOL;
+			return false;
+		}
 
 		echo 'Submitted to http://www.imdb.com/title/'.$tconst.PHP_EOL;
+		return true;
 	}
 
 	public function http_build_cookie(array $data)
